@@ -157,8 +157,8 @@ void pixels_core() {
 		}
 		
 		//move the bat
-		//if (!gpio_get(BUTTON_RIGHT_GPIO) && bat_x > 0) { bat_x--;}
-		//if (!gpio_get(BUTTON_LEFT_GPIO) && bat_x < 189) { bat_x++;}
+		if (!gpio_get(BUTTON_RIGHT_GPIO) && bat_x > 0) { bat_x--;}
+		if (!gpio_get(BUTTON_LEFT_GPIO) && bat_x < 189) { bat_x++;}
 		
 		//draw the bat
 		draw_square(bat_x, bat_y, 50,10,4);
