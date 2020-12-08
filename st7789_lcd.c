@@ -15,6 +15,11 @@
 
 #include "st7789_lcd.pio.h"
 
+#include "ball.h"
+#include "bat.h"
+#include "brick.h"
+#include "brick2.h"
+
 #define SCREEN_WIDTH 240
 #define SCREEN_HEIGHT 320
 #define IMAGE_SIZE 256
@@ -107,6 +112,30 @@ void draw_square(int x, int y, int width, int height, int colour) {
 	
 }
 
+//abosolutely no idea of the colour model this is using.
+//not going to worry about it too much. Wait and see how other displays work
+void load_sprite_colours(uint16_t sprite_colours[][3], int size, int offset) {
+	for(int i=0; i<size;i++) {
+		colours[i+offset] = (sprite_colours[i][1]&0xf8)<<8 | (sprite_colours[i][2]&0xF8)<<3 | (sprite_colours[i][0]&0xf8)>>3;
+	}
+	
+}
+
+//bugger, need to convert the sprite to the correct format.
+void draw_sprite(int x, int y, int width, int height, uint8_t sprite[], int transparent_index, int colour_offset) {
+	
+	for(int i=0; i<width; i++) {
+		for(int j=0; j<height; j++) {
+			if(sprite[(i*width)+j] != transparent_index) {
+				pixels[x+i][y+j] = sprite[(j*width)+i]+colour_offset;
+			}
+			
+		}
+	}
+	
+	
+}
+
 void pixels_core() {
 	//do our processing and drawing here
 	colours[0] = 0; // black -- acutally, this is white. Something's going a bit fishy
@@ -145,13 +174,21 @@ void pixels_core() {
 		}
 		
 		//bounce a square 'ball'
-		draw_square(x,y,BALL_SIZE,BALL_SIZE,2);
+		//let's draw a sprite
+		//draw_square(x,y,BALL_SIZE,BALL_SIZE,2);
+		draw_sprite(x,y,BALL_SIZE,BALL_SIZE, ball, 15, 10);
 		
 		//draw the blocks
 		for(int i = 0; i<10;i++) {
 			for(int j=0;j<5;j++) {
 				if(blocks[i][j]) {
-					draw_square((i*24), (j*10),23,9,3);
+					if((i+j)%2) {
+						draw_sprite((i*24),(j*10), 23, 9, brick, 15, 50);
+					}
+					else {
+						draw_sprite((i*24),(j*10), 23, 9, brick2, 15, 50);
+					}
+					//draw_square((i*24), (j*10),23,9,3);
 				}
 			}
 		}
@@ -161,7 +198,8 @@ void pixels_core() {
 		if (!gpio_get(BUTTON_LEFT_GPIO) && bat_x < 189) { bat_x++;}
 		
 		//draw the bat
-		draw_square(bat_x, bat_y, 70,10,4);
+		//draw_square(bat_x, bat_y, 70,10,4);
+		draw_sprite(bat_x,bat_y,70,10, bat, 15, 30);
 		
 		//collision detection
 		if(y<51) {
@@ -189,7 +227,7 @@ void pixels_core() {
 		
 		if((x>215 && direction_x > 0) || (x<5 && direction_x < 0)) { direction_x = -1*direction_x; }
 		
-		if(y==0) { direction_y = -1; } // bounce off the roof
+		if(y<=0) { direction_y = 1; } // bounce off the roof
 		
 		//collision detection with the bat
 		
@@ -214,7 +252,7 @@ void pixels_core() {
 
 
 int main() {
-    setup_default_uart();
+    //setup_default_uart();
 	
 	gpio_init(BUTTON_LEFT_GPIO);
     gpio_dir(BUTTON_LEFT_GPIO, GPIO_IN);
@@ -245,34 +283,13 @@ int main() {
     lcd_init(pio, sm, st7789_init_seq);
     gpio_put(PIN_BL, 1);
 
-    // Other SDKs: static image on screen, lame, boring
-    // Pico SDK: spinning image on screen, bold, exciting
-
-    // Lane 0 will be u coords (bits 8:1 of addr offset), lane 1 will be v
-    // coords (bits 16:9 of addr offset), and we'll represent coords with
-    // 16.16 fixed point. ACCUM0,1 will contain current coord, BASE0/1 will
-    // contain increment vector, and BASE2 will contain image base pointer
 	
-	//this this is just for the spinning logo
-	
-	/**
-    #define UNIT_LSB 16
-    interp_config lane0_cfg = interp_default_config();
-    interp_config_shift(&lane0_cfg, UNIT_LSB - 1); // -1 because 2 bytes per pixel
-    interp_config_mask(&lane0_cfg, 1, 1 + (LOG_IMAGE_SIZE - 1));
-    interp_config_add_raw(&lane0_cfg, true); // Add full accumulator to base with each POP
-    interp_config lane1_cfg = interp_default_config();
-    interp_config_shift(&lane1_cfg, UNIT_LSB - (1 + LOG_IMAGE_SIZE));
-    interp_config_mask(&lane1_cfg, 1 + LOG_IMAGE_SIZE, 1 + (2 * LOG_IMAGE_SIZE - 1));
-    interp_config_add_raw(&lane1_cfg, true);
+	pause=false;
 
-    interp_set_config(interp0, 0, &lane0_cfg);
-    interp_set_config(interp0, 1, &lane1_cfg);
-    interp0->base[2] = (uint32_t)raspberry_256x256;
-
-    float theta = 0.f;
-    float theta_max = 2.f * (float)M_PI;
-	**/
+    load_sprite_colours(ball_colours, 16, 10);
+	load_sprite_colours(bat_colours, 16, 30);
+	load_sprite_colours(brick_colours, 16, 50);
+	load_sprite_colours(brick2_colours, 16, 70);
 	
 	//just yeet out the pixels as fast as possible
 	//no doubt this could be handled better with DMA, but this'll do for now.
@@ -282,6 +299,7 @@ int main() {
         for (int y = 0; y < SCREEN_HEIGHT; ++y) {
             for (int x = 0; x < SCREEN_WIDTH; ++x) {
 				while(pause) {sleep_us(1);}
+			
                 st7789_lcd_put(pio, sm, colours[pixels[x][y]] >> 8);
                 st7789_lcd_put(pio, sm, colours[pixels[x][y]] & 0xff);
             }
