@@ -118,7 +118,7 @@ void pixels_core() {
 	int x = 0;
 	int y = 200;
 	int direction_x = 1;
-	int direction_y = 1;
+	int direction_y = -1;
 	
 	int bat_x = 100;
 	int bat_y = 300;
@@ -161,7 +161,7 @@ void pixels_core() {
 		if (!gpio_get(BUTTON_LEFT_GPIO) && bat_x < 189) { bat_x++;}
 		
 		//draw the bat
-		draw_square(bat_x, bat_y, 50,10,4);
+		draw_square(bat_x, bat_y, 70,10,4);
 		
 		//collision detection
 		if(y<51) {
@@ -187,10 +187,23 @@ void pixels_core() {
 		x=x+direction_x;
 		y=y+direction_y;
 		
-		if(x>219) { direction_x = -1; }
-		if(x==0) { direction_x = 1;} //-- actually, you loose!
-		if(y>299) { direction_y = -1; }
-		if(y==0) { direction_y = 1;}
+		if((x>215 && direction_x > 0) || (x<5 && direction_x < 0)) { direction_x = -1*direction_x; }
+		
+		if(y==0) { direction_y = -1; } // bounce off the roof
+		
+		//collision detection with the bat
+		
+		if( y==280) {
+			int center_x = (x+10);
+			if(center_x>bat_x && x<(center_x + 70)) { 
+				int posn = 3 - (int)((center_x-bat_x) /10); // bounce depending where on bat hit
+				direction_x = -1 * (int)(posn/2); // 
+			
+				direction_y = direction_y*-1;} // need to make this more based on where it hits on the bat.
+		}
+		
+		
+		if(y>310) { while(1) {}} //just crash if you loose
 		
 		pause = false;
 		
