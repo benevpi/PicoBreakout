@@ -60,7 +60,7 @@ static const uint16_t st7789_init_seq[] = {
     2, 0,   0x36, 0x00,                   // Set MADCTL: row then column, refresh is bottom to top ????
     5, 0,   0x2a, 0x00, 0x00, 0x00, 0xf0, // CASET: column addresses from 0 to 240 (f0)
     5, 0,   0x2b, 0x00, 0x00, 0x01, 0x40, // RASET: row addresses from 0 to 240 (f0)
-    1, 2,   0x21,                         // Inversion on, then 10 ms delay (supposedly a hack?)
+    1, 2,   0x20,                         // Inversion on, then 10 ms delay (supposedly a hack?)
     1, 2,   0x13,                         // Normal display on, then 10 ms delay
     1, 2,   0x29,                         // Main screen turn on, then wait 500 ms
     0                                     // Terminate list
@@ -116,7 +116,7 @@ void draw_square(int x, int y, int width, int height, int colour) {
 //not going to worry about it too much. Wait and see how other displays work
 void load_sprite_colours(uint16_t sprite_colours[][3], int size, int offset) {
 	for(int i=0; i<size;i++) {
-		colours[i+offset] = (sprite_colours[i][1]&0xf8)<<8 | (sprite_colours[i][2]&0xF8)<<3 | (sprite_colours[i][0]&0xf8)>>3;
+		colours[i+offset] = (sprite_colours[i][2]&0xf8)<<8 | (sprite_colours[i][1]&0xF8)<<3 | (sprite_colours[i][0]&0xf8)>>3;
 	}
 	
 }
@@ -126,7 +126,7 @@ void draw_sprite(int x, int y, int width, int height, uint8_t sprite[], int tran
 	
 	for(int i=0; i<width; i++) {
 		for(int j=0; j<height; j++) {
-			if(sprite[(i*width)+j] != transparent_index) {
+			if(sprite[(j*width)+i] != transparent_index) {
 				pixels[x+i][y+j] = sprite[(j*width)+i]+colour_offset;
 			}
 			
