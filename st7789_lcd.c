@@ -15,6 +15,14 @@
 
 #include "st7789_lcd.pio.h"
 
+//from usb example, not sure I need all of them
+#include <stdio.h>
+#include <string.h>
+
+#include "bsp/board.h"
+#include "tusb.h"
+//end usb includes
+
 #include "ball.h"
 #include "bat.h"
 #include "brick.h"
@@ -25,8 +33,8 @@
 #define IMAGE_SIZE 256
 #define LOG_IMAGE_SIZE 8
 
-#define PIN_DIN 0
-#define PIN_CLK 1
+#define PIN_DIN 8
+#define PIN_CLK 9
 #define PIN_CS 2
 #define PIN_DC 3
 #define PIN_RESET 4
@@ -39,6 +47,9 @@
 #define BUTTON_RIGHT_GPIO 15
 #define BUTTON_LEFT_GPIO 14
 
+//from usb example
+extern void hid_task(void);
+
 //each pixel contains a byte which is a lookup to the colours table
 uint8_t pixels[SCREEN_WIDTH][SCREEN_HEIGHT]; 
 
@@ -49,7 +60,12 @@ bool blocks[10][5];
 //put usefule colours in here
 uint16_t colours[255];
 
+int bat_x = 100;
+
 bool pause = false;
+
+bool left = false;
+bool right = false;
 
 // Format: cmd length (including cmd byte), post delay in units of 5 ms, then cmd payload
 // Note the delays have been shortened a little
@@ -136,6 +152,13 @@ void draw_sprite(int x, int y, int width, int height, uint8_t sprite[], int tran
 	
 }
 
+void move_bat() {
+	if (right && bat_x > 0) { bat_x--;}
+	if (left && bat_x < 189) { bat_x++;}
+}
+	
+	
+
 void pixels_core() {
 	//do our processing and drawing here
 	colours[0] = 0; // black -- acutally, this is white. Something's going a bit fishy
@@ -149,7 +172,7 @@ void pixels_core() {
 	int direction_x = 1;
 	int direction_y = -1;
 	
-	int bat_x = 100;
+
 	int bat_y = 300;
 	
 	//init all blocks
@@ -162,8 +185,12 @@ void pixels_core() {
 	while(1) {
 		
 		pause = true;
-		sleep_us(10); // wait for buffers to flush?
 
+
+		tuh_task(); // this should always end with the right values for left and right keypresses?
+		hid_task();
+		
+		sleep_us(10); // wait for buffers to flush?
 		
 		//blank the display
 		for(int i = 0; i<240; i++) {
@@ -194,8 +221,15 @@ void pixels_core() {
 		}
 		
 		//move the bat
+		/** get rid of gpio bits
 		if (!gpio_get(BUTTON_RIGHT_GPIO) && bat_x > 0) { bat_x--;}
 		if (!gpio_get(BUTTON_LEFT_GPIO) && bat_x < 189) { bat_x++;}
+		**/
+		
+		//keyboard move
+		move_bat();
+
+		
 		
 		//draw the bat
 		//draw_square(bat_x, bat_y, 70,10,4);
@@ -252,7 +286,9 @@ void pixels_core() {
 
 
 int main() {
-    //setup_default_uart();
+    setup_default_uart();
+	board_init(); // from usb host -- not sure if needed
+	tusb_init();
 	
 	gpio_init(BUTTON_LEFT_GPIO);
     gpio_dir(BUTTON_LEFT_GPIO, GPIO_IN);
@@ -305,4 +341,87 @@ int main() {
             }
         }
     }
+}
+
+//copied from usb host example
+//--------------------------------------------------------------------+
+// USB HID
+//--------------------------------------------------------------------+
+#if CFG_TUH_HID_KEYBOARD
+
+CFG_TUSB_MEM_SECTION static hid_keyboard_report_t usb_keyboard_report;
+uint8_t const keycode2ascii[128][2] =  { HID_KEYCODE_TO_ASCII };
+
+// look up new key in previous keys
+static inline bool find_key_in_report(hid_keyboard_report_t const *p_report, uint8_t keycode)
+{
+  for(uint8_t i=0; i<6; i++)
+  {
+    if (p_report->keycode[i] == keycode)  return true;
+  }
+
+  return false;
+}
+
+static inline void process_kbd_report(hid_keyboard_report_t const *p_new_report)
+{
+  static hid_keyboard_report_t prev_report = { 0, 0, {0} }; // previous report to check key released
+  left = false;
+  right = false;
+
+  //------------- example code ignore control (non-printable) key affects -------------//
+  for(uint8_t i=0; i<6; i++)
+  {
+    if ( p_new_report->keycode[i] )
+    {
+	  bool const is_shift =  p_new_report->modifier & (KEYBOARD_MODIFIER_LEFTSHIFT | KEYBOARD_MODIFIER_RIGHTSHIFT);
+	  uint8_t ch = keycode2ascii[p_new_report->keycode[i]][is_shift ? 1 : 0];
+	  putchar(ch);
+	  if(ch == 'q') { left=true;}
+	  if(ch == 'w') { right=true;}
+    }
+    // TODO example skips key released
+  }
+
+  prev_report = *p_new_report;
+}
+
+void tuh_hid_keyboard_mounted_cb(uint8_t dev_addr)
+{
+  // application set-up
+  printf("A Keyboard device (address %d) is mounted\r\n", dev_addr);
+
+  tuh_hid_keyboard_get_report(dev_addr, &usb_keyboard_report);
+}
+
+void tuh_hid_keyboard_unmounted_cb(uint8_t dev_addr)
+{
+  // application tear-down
+  printf("A Keyboard device (address %d) is unmounted\r\n", dev_addr);
+}
+
+// invoked ISR context
+void tuh_hid_keyboard_isr(uint8_t dev_addr, xfer_result_t event)
+{
+  (void) dev_addr;
+  (void) event;
+}
+
+#endif
+
+void hid_task(void)
+{
+  uint8_t const addr = 1;
+
+#if CFG_TUH_HID_KEYBOARD
+  if ( tuh_hid_keyboard_is_mounted(addr) )
+  {
+    if ( !tuh_hid_keyboard_is_busy(addr) )
+    {
+      process_kbd_report(&usb_keyboard_report);
+      tuh_hid_keyboard_get_report(addr, &usb_keyboard_report);
+    }
+  }
+#endif
+
 }
