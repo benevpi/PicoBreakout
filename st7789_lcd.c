@@ -152,6 +152,7 @@ void draw_sprite(int x, int y, int width, int height, uint8_t sprite[], int tran
 	
 }
 
+//probably should move this back into the main game loop now.
 void move_bat() {
 	if (right && bat_x > 0) { bat_x--;}
 	if (left && bat_x < 189) { bat_x++;}
