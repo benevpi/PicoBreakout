@@ -30,21 +30,11 @@
 #define LOG_IMAGE_SIZE 8
 
 
-//not really dual core render -- second core render
-
-
-#define PIN_DIN 0
-#define PIN_CLK 1
-#define PIN_CS 2
-#define PIN_DC 3
-#define PIN_RESET 4
-#define PIN_BL 5
-
 #define BALL_SIZE 20
 
-#define SERIAL_CLK_DIV 1.f
 
 //moved to GPIOs not used by VGA
+//Note, there's cross-talk if this is too close to a high-speed signal.
 #define BUTTON_RIGHT_GPIO 19
 #define BUTTON_LEFT_GPIO 20
 
@@ -52,45 +42,7 @@
 #define VREG_VSEL VREG_VOLTAGE_1_30
 #include "hardware/vreg.h"
 
-/**
 
-const scanvideo_timing_t vga_timing_648x480_50ish3 =
-        {
-
-                .clock_freq = 24000000,
-
-                .h_active = 640,
-                .v_active = 480,
-
-                .h_front_porch = 72,
-                .h_pulse = 96,
-                .h_total = 928,
-                .h_sync_polarity = 1,
-
-                .v_front_porch = 8,
-                .v_pulse = 2,
-                .v_total = 518,
-                .v_sync_polarity = 1,
-
-                .enable_clock = 0,
-                .clock_polarity = 0,
-
-                .enable_den = 0
-        };
-
-#define actual_vga_timing_50 vga_timing_648x480_50ish3
-
-const scanvideo_mode_t vga_mode_320x240_50 =
-        {
-                .default_timing = &actual_vga_timing_50,
-                .pio_program = &video_24mhz_composable,
-                .width = 320,
-                .height = 240,
-                .xscale = 2,
-                .yscale = 2,
-        };
-*/
-		
 #define VGA_MODE vga_mode_320x240_60
 
 //each pixel contains a byte which is a lookup to the colours table
@@ -99,7 +51,7 @@ uint8_t pixels[SCREEN_WIDTH][SCREEN_HEIGHT];
 uint16_t colours[255];
 
 uint16_t this_line[320];
-bool drawing = false;
+
 
 int x = 0;
 int y = 200;
@@ -122,15 +74,6 @@ void fill_scanline_buffer(struct scanvideo_scanline_buffer *buffer);
 void update_scene();
 void init_scene();
 
-int64_t timer_callback(alarm_id_t alarm_id, void *user_data) {
-    struct scanvideo_scanline_buffer *buffer = scanvideo_begin_scanline_generation(false);
-    while (buffer) {
-        fill_scanline_buffer(buffer);
-        scanvideo_end_scanline_generation(buffer);
-        buffer = scanvideo_begin_scanline_generation(false);
-    }
-    return 100;
-}
 
 //Bits from sprite_demo.c
 // "Worker thread" for each core
@@ -162,40 +105,6 @@ void __time_critical_func(render_loop)() {
     }
 }
 
-static void scanline(int l) {
-	for(int i=0; i<320; i++) {
-		this_line[i] = (colours[pixels[l][i]]); // need to decompress 8 bpp to 16bpp anyway.
-		//colour_buf[i] = (colours[pixels[l][i]]) ; // swapped width & heigh. Also, no check that pixels dimensions lines up with buffer dimensions.
-
-	}
-}
-
-/**
-void __time_critical_func(render_loop)() {
-    static uint32_t last_frame_num = 0;
-    int core_num = get_core_num();
-	int y=0;
-    printf("Rendering on core %d\n", core_num);
-    while (true) {
-        mutex_enter_blocking(&frame_logic_mutex);
-        if (y == VGA_MODE.height) {
-            //params_ready = false;
-            update_scene();
-            y = 0;
-        }
-		y++;
-
-		//I think this just updates the framebuffer for our current scanline?
-        //scanline(framebuffer + _y * 320, 320, _x0, _y0 + _dy0_dy * _y, _dx0_dx );
-		scanline(y);
-#if !PICO_ON_DEVICE
-        struct scanvideo_scanline_buffer *buffer = scanvideo_begin_scanline_generation(true);
-        fill_scanline_buffer(buffer);
-        scanvideo_end_scanline_generation(buffer);
-#endif
-    }
-}
-*/
 
 struct semaphore video_setup_complete;
 
@@ -223,33 +132,6 @@ void vga_main() {
     render_loop(); // don't actually want core 0 to render. Let's leave all that to core 1
 
 }
-
-
-
-/** use from prite_demo
-int vga_main(void) {
-//    framebuffer = calloc(320*240, sizeof(uint16_t));
-    mutex_init(&frame_logic_mutex);
-    sem_init(&video_setup_complete, 0, 1);
-
-    // Core 1 will wait for us to finish video setup, and then start rendering
-    multicore_launch_core1(core1_func);
-
-    hard_assert(VGA_MODE.width + 4 <= PICO_SCANVIDEO_MAX_SCANLINE_BUFFER_WORDS * 2);
-    scanvideo_setup(&VGA_MODE);
-    scanvideo_timing_enable(true);
-
-    //frame_update_logic();
-    sem_release(&video_setup_complete);
-
-#if PICO_ON_DEVICE
-    add_alarm_in_us(100, timer_callback, NULL, true);
-#endif
-    render_loop(); // only doing graphics on one core
-    return 0;
-}
-*/
-
 
 // Helper functions to:
 // - Get a scanbuf into a state where a region of it can be directly rendered to,
@@ -282,39 +164,14 @@ static inline void raw_scanline_finish(struct scanvideo_scanline_buffer *dest) {
 
 void __time_critical_func(render_scanline)(struct scanvideo_scanline_buffer *dest, int core) {
     int l = scanvideo_scanline_number(dest->scanline_id);
-    uint16_t *colour_buf = raw_scanline_prepare(dest, VGA_MODE.width);
+    uint16_t *colour_buf = raw_scanline_prepare(dest, (VGA_MODE.width));
 
-
-    const uint16_t bgcol = PICO_SCANVIDEO_PIXEL_FROM_RGB8(0x40, 0xc0, 0xff);
-	//maybe thiswill initialise things better?
-    //sprite_fill16(colour_buf, bgcol, 320); // probably don't need this
-
-	
-//THIS IS THE BIT WE NEED TO HACK TO GET OUR SCENE TO RENDER
-/**
-    for (int i = 0; i < N_BERRIES; ++i)
-        sprite_sprite16(colour_buf, &berry[i], l, VGA_MODE.width);
-*/
-
-	drawing = true;
 	for(int i=0; i<320; i++) {
-		//this_line[i] = (colours[pixels[l][i]]); // need to decompress 8 bpp to 16bpp anyway.
-		colour_buf[i] =  (colours[pixels[l][i]])<<16 | (colours[pixels[l][(i)]]) ; // swapped width & heigh. Also, no check that pixels dimensions lines up with buffer dimensions.
+		//note the pixels array was originally for a portrait array, so need to rotate it 90 degrees for a VGA display		
+		colour_buf[i] =  ((colours[pixels[l][i]]));
 
 	}
-	drawing=false;
 		
-	static uint32_t postamble[] = {
-            0x0000u | (COMPOSABLE_EOL_ALIGN << 16)
-    };
-
-	//colour_buf[319]= host_safe_hw_ptr(postamble);//(COMPOSABLE_EOL_ALIGN << 16) | 0;//need to end with black pixel?
-	
-	//fill_scanline_buffer(dest);
-	
-	//dest->data_used = 320;
-	
-
     raw_scanline_finish(dest);
 }
 
@@ -324,14 +181,9 @@ void __time_critical_func(render_scanline)(struct scanvideo_scanline_buffer *des
 //end bits from sprite_demo
 
 
-
-//each block is 24 pixels by 10, and there are 10x5 of them that can be there
-
 bool blocks[10][5];
 
 
-
-bool pause = false;
 
 // Format: cmd length (including cmd byte), post delay in units of 5 ms, then cmd payload
 // Note the delays have been shortened a little
@@ -371,9 +223,7 @@ void load_sprite_colours(uint16_t sprite_colours[][3], int size, int offset) {
 
 //bugger, need to convert the sprite to the correct format.
 void draw_sprite(int x, int y, int width, int height, uint8_t sprite[], int transparent_index, int colour_offset) {
-	
-	//don't try and draw if a scanline is being generated
-	while(drawing) {sleep_us(1);}
+
 	
 	for(int i=0; i<width; i++) {
 		for(int j=0; j<height; j++) {
@@ -408,7 +258,7 @@ void init_scene() {
 
 void update_scene() {
 		
-		pause = true;
+		
 		sleep_us(10); // wait for buffers to flush?
 
 		
@@ -449,6 +299,7 @@ void update_scene() {
 		draw_sprite(bat_x,bat_y,70,10, bat, 15, 30);
 		
 		//collision detection
+		//horrific and doesn't really work. NEED TO FIX
 		if(y<51) {
 		//check against all the blocks
 			for(int i = 0; i<10;i++) {
@@ -491,7 +342,6 @@ void update_scene() {
 		
 		if(y>310) { while(1) {}} //just crash if you loose
 		
-		pause = false;
 		
 		//sleep seems to be doing weird things. Does this help?
 		//not the sleep, it's the calculations.
@@ -518,17 +368,6 @@ int main() {
     gpio_put(PICO_SMPS_MODE_PIN, 1);
 #endif
 
-//not sure this is needed
-/**
-    xmin = -100;
-    xmax = VGA_MODE.width - 30;
-    ymin = -100;
-    ymax = VGA_MODE.height - 30;
-	*/
-	
-	//I think this will launch the other rendering core and then return?
-	//note - the frame update and render are not in line, so could cause slight alignment issues.
-
 	
 	gpio_init(BUTTON_LEFT_GPIO);
     gpio_dir(BUTTON_LEFT_GPIO, GPIO_IN);
@@ -538,11 +377,6 @@ int main() {
     gpio_dir(BUTTON_RIGHT_GPIO, GPIO_IN);
     gpio_pull_up(BUTTON_RIGHT_GPIO);
 
-//don't need the pio stuff
-
- 
-	
-	pause=false;
 
     load_sprite_colours(ball_colours, 16, 10);
 	load_sprite_colours(bat_colours, 16, 30);
@@ -551,28 +385,8 @@ int main() {
 	
 	init_scene();
 	
-	//all rendering things on core 1
-	//split everything up between the two cores
-	vga_main();
-	//multicore_launch_core1(vga_main);
-	//just yeet out the pixels as fast as possible
-	//no doubt this could be handled better with DMA, but this'll do for now.
-	sleep_us(2000000); // sleep for 2 sec to give vga time to start
 
-	//all game calcs on core 0
-    while (1) {
-		//update_scene();
-
-/** Dont need the LCD update code
-        st7789_start_pixels(pio, sm);
-        for (int y = 0; y < SCREEN_HEIGHT; ++y) {
-            for (int x = 0; x < SCREEN_WIDTH; ++x) {
-				while(pause) {sleep_us(1);}
-			
-                st7789_lcd_put(pio, sm, colours[pixels[x][y]] >> 8);
-                st7789_lcd_put(pio, sm, colours[pixels[x][y]] & 0xff);
-            }
-        }
-**/
-    }
+	vga_main(); // note -- never returns from this.
+	
+	return 0;
 }
