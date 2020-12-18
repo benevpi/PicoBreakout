@@ -37,8 +37,8 @@
 
 //moved to GPIOs not used by VGA
 //Note, there's cross-talk if this is too close to a high-speed signal.
-#define BUTTON_RIGHT_GPIO 26
-#define BUTTON_LEFT_GPIO 27
+#define BUTTON_RIGHT_GPIO 21
+#define BUTTON_LEFT_GPIO 22
 
 #define TURBO_BOOST
 #define VREG_VSEL VREG_VOLTAGE_1_30
