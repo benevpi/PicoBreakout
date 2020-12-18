@@ -18,6 +18,8 @@
 #include "hardware/clocks.h"
 #include "hardware/structs/vreg_and_chip_reset.h"
 
+#include "sprite.h"
+
 #include "ball.h"
 #include "bat.h"
 #include "brick.h"
@@ -35,15 +37,15 @@
 
 //moved to GPIOs not used by VGA
 //Note, there's cross-talk if this is too close to a high-speed signal.
-#define BUTTON_RIGHT_GPIO 19
-#define BUTTON_LEFT_GPIO 20
+#define BUTTON_RIGHT_GPIO 26
+#define BUTTON_LEFT_GPIO 27
 
 #define TURBO_BOOST
 #define VREG_VSEL VREG_VOLTAGE_1_30
 #include "hardware/vreg.h"
 
 
-#define VGA_MODE vga_mode_320x240_60
+#define VGA_MODE vga_mode_tft_800x480_50
 
 //each pixel contains a byte which is a lookup to the colours table
 uint8_t pixels[SCREEN_WIDTH][SCREEN_HEIGHT]; 
@@ -84,7 +86,7 @@ void __time_critical_func(render_loop)() {
     printf("Rendering on core %d\n", core_num);
     while (true) {
         struct scanvideo_scanline_buffer *scanline_buffer = scanvideo_begin_scanline_generation(true);
-        //mutex_enter_blocking(&frame_logic_mutex);
+        mutex_enter_blocking(&frame_logic_mutex);
         uint32_t frame_num = scanvideo_frame_number(scanline_buffer->scanline_id);
         // Note that with multiple cores we may have got here not for the first
         // scanline, however one of the cores will do this logic first before either
@@ -96,7 +98,7 @@ void __time_critical_func(render_loop)() {
             update_scene();
         } 
 		
-        //mutex_exit(&frame_logic_mutex);
+        mutex_exit(&frame_logic_mutex);
 
         render_scanline(scanline_buffer, core_num);
 
@@ -165,41 +167,30 @@ static inline void raw_scanline_finish(struct scanvideo_scanline_buffer *dest) {
 void __time_critical_func(render_scanline)(struct scanvideo_scanline_buffer *dest, int core) {
     int l = scanvideo_scanline_number(dest->scanline_id);
     uint16_t *colour_buf = raw_scanline_prepare(dest, (VGA_MODE.width));
+	
+	const uint16_t bgcol = PICO_SCANVIDEO_PIXEL_FROM_RGB8(0x40, 0xc0, 0xff);
+    sprite_fill16(colour_buf, bgcol, VGA_MODE.width);
 
-	for(int i=0; i<320; i++) {
-		//note the pixels array was originally for a portrait array, so need to rotate it 90 degrees for a VGA display		
-		colour_buf[i] =  ((colours[pixels[l][i]]));
+	/*
+	//render each pixel twice
+	if(l<239) {
+		for(int i=0; i<320; i++) {
+			//note the pixels array was originally for a portrait array, so need to rotate it 90 degrees for a VGA display		
+			colour_buf[i] =  ((colours[pixels[l][i]]));
+			//colour_buf[(2*i)+1] =  ((colours[pixels[l][i]]));
+
+		}
 
 	}
+	*/
 		
     raw_scanline_finish(dest);
 }
-
-
-
 
 //end bits from sprite_demo
 
 
 bool blocks[10][5];
-
-
-
-// Format: cmd length (including cmd byte), post delay in units of 5 ms, then cmd payload
-// Note the delays have been shortened a little
-static const uint16_t st7789_init_seq[] = {
-    1, 20,  0x01,                         // Software reset
-    1, 10,  0x11,                         // Exit sleep mode
-    2, 2,   0x3a, 0x55,                   // Set colour mode to 16 bit
-    2, 0,   0x36, 0x00,                   // Set MADCTL: row then column, refresh is bottom to top ????
-    5, 0,   0x2a, 0x00, 0x00, 0x00, 0xf0, // CASET: column addresses from 0 to 240 (f0)
-    5, 0,   0x2b, 0x00, 0x00, 0x01, 0x40, // RASET: row addresses from 0 to 240 (f0)
-    1, 2,   0x20,                         // Inversion on, then 10 ms delay (supposedly a hack?)
-    1, 2,   0x13,                         // Normal display on, then 10 ms delay
-    1, 2,   0x29,                         // Main screen turn on, then wait 500 ms
-    0                                     // Terminate list
-};
-
 
 
 
@@ -368,6 +359,7 @@ int main() {
     gpio_put(PICO_SMPS_MODE_PIN, 1);
 #endif
 
+
 	
 	gpio_init(BUTTON_LEFT_GPIO);
     gpio_dir(BUTTON_LEFT_GPIO, GPIO_IN);
@@ -376,6 +368,9 @@ int main() {
 	gpio_init(BUTTON_RIGHT_GPIO);
     gpio_dir(BUTTON_RIGHT_GPIO, GPIO_IN);
     gpio_pull_up(BUTTON_RIGHT_GPIO);
+	
+	gpio_funcsel(19, GPIO_FUNC_PIO0);
+	
 
 
     load_sprite_colours(ball_colours, 16, 10);
