@@ -3,6 +3,8 @@ A very simple implementation of breakout on Raspberry Pi Pico. This uses an 240x
 
 There is a bit of an odd dual core thing in there. I initially intended to offload some graphics processing to one core and manage the display on the other, but it's not worked out that way, and it's effectively running single-threaded just in two threads at the moment.
 
+See the branches, but this can run on SPI screens, VGA and DPI, and also take input from either buttons or a keyboard
+
 ## TODO
  - draw better graphics
  - get some system of scoring
