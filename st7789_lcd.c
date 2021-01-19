@@ -68,7 +68,7 @@ static const uint16_t st7789_init_seq[] = {
 
 static inline void lcd_set_dc_cs(bool dc, bool cs) {
     sleep_us(1);
-    gpio_put_mask((1u << PIN_DC) | (1u << PIN_CS), !!dc << PIN_DC | !!cs << PIN_CS);
+    gpio_put_masked((1u << PIN_DC) | (1u << PIN_CS), !!dc << PIN_DC | !!cs << PIN_CS);
     sleep_us(1);
 }
 
@@ -255,11 +255,11 @@ int main() {
     //setup_default_uart();
 	
 	gpio_init(BUTTON_LEFT_GPIO);
-    gpio_dir(BUTTON_LEFT_GPIO, GPIO_IN);
+    gpio_set_dir(BUTTON_LEFT_GPIO, GPIO_IN);
     gpio_pull_up(BUTTON_LEFT_GPIO);
 	
 	gpio_init(BUTTON_RIGHT_GPIO);
-    gpio_dir(BUTTON_RIGHT_GPIO, GPIO_IN);
+    gpio_set_dir(BUTTON_RIGHT_GPIO, GPIO_IN);
     gpio_pull_up(BUTTON_RIGHT_GPIO);
 	
 	multicore_launch_core1(pixels_core);
@@ -273,10 +273,10 @@ int main() {
     gpio_init(PIN_DC);
     gpio_init(PIN_RESET);
     gpio_init(PIN_BL);
-    gpio_dir(PIN_CS, GPIO_OUT);
-    gpio_dir(PIN_DC, GPIO_OUT);
-    gpio_dir(PIN_RESET, GPIO_OUT);
-    gpio_dir(PIN_BL, GPIO_OUT);
+    gpio_set_dir(PIN_CS, GPIO_OUT);
+    gpio_set_dir(PIN_DC, GPIO_OUT);
+    gpio_set_dir(PIN_RESET, GPIO_OUT);
+    gpio_set_dir(PIN_BL, GPIO_OUT);
 
     gpio_put(PIN_CS, 1);
     gpio_put(PIN_RESET, 1);
