@@ -121,7 +121,7 @@ void load_sprite_colours(uint16_t sprite_colours[][3], int size, int offset) {
 	
 }
 
-//bugger, need to convert the sprite to the correct format.
+//need to convert the sprite to the correct format.
 void draw_sprite(int x, int y, int width, int height, uint8_t sprite[], int transparent_index, int colour_offset) {
 	
 	for(int i=0; i<width; i++) {
