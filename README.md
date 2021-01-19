@@ -6,7 +6,7 @@ There is a bit of an odd dual core thing in there. I initially intended to offlo
 See the branches, but this can run on SPI screens, VGA and DPI, and also take input from either buttons or a keyboard
 
 ## TODO
- - draw better graphics
- - get some system of scoring
+ - Frankly the graphics are hideous.
+ - Could use some system of scoring
  - maybe do some levels?
  - colours perhaps?
